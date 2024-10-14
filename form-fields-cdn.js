@@ -11419,81 +11419,84 @@ async function handleFormSubmit(form) {
   });
 
   const siteId = document.querySelector("html").getAttribute("data-wf-site");
-  // checking the submission to notion status
-  const isSubmittingToNotionResponse = await fetch(
-    `http://localhost:3000/api/sites/getSubmittingToNotionStatus?siteId=${siteId}`,
-    {
-      method: "GET",
-    }
-  );
-  console.log("is submitting", isSubmittingToNotionResponse);
 
-  // Parse the JSON response
-  const isSubmittingToNotion = await isSubmittingToNotionResponse.json();
-  console.log(
-    "notion submitting status",
-    isSubmittingToNotion.isSubmittingToNotion
-  );
-
-  if (!isSubmittingToNotion.isSubmittingToNotion) {
-    const response = await fetch(`https://webflow.com/api/v1/form/${siteId}`, {
-      method: "POST",
-      body: payload,
-    });
-    submitButton.value = submitButtonOriginalLabel;
-    const formId = form.id;
-
-    const redirectUrl = form.getAttribute("redirect");
-    if (redirectUrl) window.location.href = redirectUrl;
-    else if (response.ok) {
-      document.querySelector(`#${formId} ~ .w-form-done`).style.display =
-        "block";
-      form.style.display = "none";
-    } else {
-      document.querySelector(`#${formId} ~ .w-form-fail`).style.display =
-        "block";
-      form.style.display = "none";
-    }
-  } else {
-    const notionPayload = new URLSearchParams({
-      ...webflowInputs,
-      ...formFieldsInputs,
-    });
-
-    const parsedData = {};
-
-    notionPayload.forEach((value, key) => {
-      const formattedKey = key.replace(/^fields\[(.*)\]$/, "$1");
-      parsedData[formattedKey] = value;
-    });
-
-    const response = await fetch(
-      "http://localhost:3000/api/sites/formSubmissionToNotion",
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          siteId: siteId,
-          data: parsedData,
-        }),
-      }
+  try {
+    // Checking the submission to Notion status
+    const isSubmittingToNotionResponse = await fetch(
+      `http://localhost:3000/api/sites/getSubmittingToNotionStatus?siteId=${siteId}`,
+      { method: "GET" }
     );
-    if (!response.ok) {
-      await fetch(`https://webflow.com/api/v1/form/${siteId}`, {
-        method: "POST",
-        body: payload,
-      });
 
-      console.log("response", response);
+    const isSubmittingToNotion = await isSubmittingToNotionResponse.json();
+    console.log(
+      "Notion submitting status",
+      isSubmittingToNotion.isSubmittingToNotion
+    );
+
+    if (!isSubmittingToNotion.isSubmittingToNotion) {
+      const response = await fetch(
+        `https://webflow.com/api/v1/form/${siteId}`,
+        {
+          method: "POST",
+          body: payload,
+        }
+      );
+
       submitButton.value = submitButtonOriginalLabel;
       const formId = form.id;
 
       const redirectUrl = form.getAttribute("redirect");
-      if (redirectUrl) window.location.href = redirectUrl;
-      else if (response.ok) {
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else if (response.ok) {
+        document.querySelector(`#${formId} ~ .w-form-done`).style.display =
+          "block";
+        form.style.display = "none";
+      } else {
+        document.querySelector(`#${formId} ~ .w-form-fail`).style.display =
+          "block";
+        form.style.display = "none";
+      }
+    } else {
+      const notionPayload = new URLSearchParams({
+        ...webflowInputs,
+        ...formFieldsInputs,
+      });
+
+      const parsedData = {};
+      notionPayload.forEach((value, key) => {
+        const formattedKey = key.replace(/^fields\[(.*)\]$/, "$1");
+        parsedData[formattedKey] = value;
+      });
+
+      const notionResponse = await fetch(
+        "http://localhost:3000/api/sites/formSubmissionToNotion",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            siteId: siteId,
+            data: parsedData,
+          }),
+        }
+      );
+      let webflowResponse = {};
+      if (!notionResponse.ok) {
+        webflowResponse = await fetch(
+          `https://webflow.com/api/v1/form/${siteId}`,
+          { method: "POST", body: payload }
+        );
+      }
+      submitButton.value = submitButtonOriginalLabel;
+      const formId = form.id;
+
+      const redirectUrl = form.getAttribute("redirect");
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else if (notionResponse.ok || webflowResponse.ok) {
         document.querySelector(`#${formId} ~ .w-form-done`).style.display =
           "block";
         form.style.display = "none";
@@ -11503,297 +11506,297 @@ async function handleFormSubmit(form) {
         form.style.display = "none";
       }
     }
+  } catch (error) {
+    console.error("Error during form submission:", error);
+    submitButton.value = submitButtonOriginalLabel;
+  }
+}
+
+/**
+ *
+ * @param {HTMLFormElement} form
+ */
+function getFormMetaData(form) {
+  return {
+    name: form.getAttribute("data-name"),
+    pageId: form.getAttribute("data-wf-page-id"),
+    elementId: form.getAttribute("data-wf-element-id"),
+    source: window.location.href,
+
+    test: false,
+    dolphin: false,
+  };
+}
+
+/**
+ *
+ * @param {HTMLFormElement} form
+ */
+function getWebflowInputFieldsData(form) {
+  const webflowInputElements = form.querySelectorAll(`input.w-input`);
+
+  const data = {};
+  for (let input of webflowInputElements) {
+    const name = input.getAttribute("data-name");
+    const value = input.value;
+
+    data[`fields[${name}]`] = value;
   }
 
-  /**
-   *
-   * @param {HTMLFormElement} form
-   */
-  function getFormMetaData(form) {
-    return {
-      name: form.getAttribute("data-name"),
-      pageId: form.getAttribute("data-wf-page-id"),
-      elementId: form.getAttribute("data-wf-element-id"),
-      source: window.location.href,
+  return data;
+}
 
-      test: false,
-      dolphin: false,
-    };
-  }
-
-  /**
-   *
-   * @param {HTMLFormElement} form
-   */
-  function getWebflowInputFieldsData(form) {
-    const webflowInputElements = form.querySelectorAll(`input.w-input`);
-
-    const data = {};
-    for (let input of webflowInputElements) {
-      const name = input.getAttribute("data-name");
-      const value = input.value;
-
-      data[`fields[${name}]`] = value;
-    }
-
-    return data;
-  }
-
-  /**
-   *
-   * @param {HTMLFormElement} form
-   */
-  function getFormFieldsInputData(form) {
-    const webflowInputElements = form.querySelectorAll(
-      `[form-fields-data-input]`
-    );
-
-    const data = {};
-    for (let input of webflowInputElements) {
-      const name = input.getAttribute("name");
-      const value = input.value;
-
-      data[`fields[${name}]`] = value;
-    }
-
-    return data;
-  }
-
-  // Validate field
-  function validateFieldData(field, value, pattern, errorMessage) {
-    const formFieldsWrapper = getParentFormFieldsWrapperDiv(field);
-    const validationMessageNode = formFieldsWrapper?.querySelector(
-      ".form-fields-data-validation-message"
-    );
-
-    if (!pattern.test(value) && value.length > 0) {
-      validationMessageNode.innerHTML = errorMessage;
-      return false;
-    }
-
-    validationMessageNode.innerHTML = "";
-    return true;
-  }
-
-  // URL validation
-
-  const urlFields = document.querySelectorAll(
-    '.form-fields-wrapper input[type="url"]'
-  );
-  urlFields.forEach((field) => {
-    field.addEventListener("input", (e) => {
-      validateFieldData(
-        field,
-        e.target.value,
-        URL_PATTERN_REGEX,
-        "Enter a valid URL"
-      );
-    });
-  });
-
-  // Email validation
-  const emailFields = document.querySelectorAll(
-    '.form-fields-wrapper input[type="email"]'
-  );
-  emailFields.forEach((field) => {
-    const message = field ? field.getAttribute("data-invalid-error-msg") : "";
-    field.addEventListener("input", (e) => {
-      validateFieldData(field, e.target.value, EMAIL_PATTERN_REGEX, message);
-    });
-  });
-
-  function validateAllFields() {
-    const urlFields = document.querySelectorAll(
-      '.form-fields-wrapper input[type="url"]'
-    );
-    const emailFields = document.querySelectorAll(
-      '.form-fields-wrapper input[type="email"]'
-    );
-    const phoneNumberFields = document.querySelectorAll(
-      '.form-fields-wrapper input[type="number"]'
-    );
-
-    for (let f of urlFields) {
-      const valid = validateFieldData(
-        f,
-        f.value,
-        URL_PATTERN_REGEX,
-        "Please enter a valid url"
-      );
-      if (!valid) return false;
-    }
-
-    for (let f of emailFields) {
-      const message =
-        f.getAttribute("data-invalid-error-msg") ||
-        "Please enter a valid email";
-      const valid = validateFieldData(f, f.value, EMAIL_PATTERN_REGEX, message);
-      if (!valid) return false;
-    }
-
-    for (let f of phoneNumberFields) {
-      if (f.required && f.value.length < 6) {
-        const formFieldsWrapper = getParentFormFieldsWrapperDiv(f);
-        const validationMessageNode = formFieldsWrapper?.querySelector(
-          ".form-fields-data-validation-message"
-        );
-        validationMessageNode.innerText = "Invalid phone number";
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * ----
-   * CONDITIONAL LOGIC - START
-   * ----
-   */
-
-  /** */
-  const FORM_STATE = {};
-  const conditionalLogicFields = document.querySelectorAll(
-    "[conditional-logic]"
+/**
+ *
+ * @param {HTMLFormElement} form
+ */
+function getFormFieldsInputData(form) {
+  const webflowInputElements = form.querySelectorAll(
+    `[form-fields-data-input]`
   );
 
-  function initializeConditionalLogic() {
-    conditionalLogicFields.forEach((field) => toggleDisplay(field));
+  const data = {};
+  for (let input of webflowInputElements) {
+    const name = input.getAttribute("name");
+    const value = input.value;
 
-    observeInputChangesAndFireConditionalLogic();
+    data[`fields[${name}]`] = value;
   }
 
-  /**
-   *
-   * @param {HTMLElement} element
-   * @param {boolean} show
-   */
-  function toggleDisplay(element, show = false) {
-    if (show) element.style.display = "initial";
-    else element.style.display = "none";
-  }
+  return data;
+}
 
-  async function observeInputChangesAndFireConditionalLogic() {
-    syncFormState();
+// Validate field
+function validateFieldData(field, value, pattern, errorMessage) {
+  const formFieldsWrapper = getParentFormFieldsWrapperDiv(field);
+  const validationMessageNode = formFieldsWrapper?.querySelector(
+    ".form-fields-data-validation-message"
+  );
 
-    conditionalLogicFields.forEach((field) =>
-      reactToCurrentFormStateBasedOnConditionalLogic(field)
-    );
-
-    await sleep(450);
-    return observeInputChangesAndFireConditionalLogic();
-  }
-
-  function syncFormState() {
-    const allInputFields = [
-      ...document.querySelectorAll(`input.w-input`),
-      ...document.querySelectorAll("[form-fields-data-input]"),
-    ];
-
-    allInputFields.forEach((input) => {
-      const name = input.getAttribute("name");
-      const value = input.value;
-
-      FORM_STATE[name] = value;
-    });
-  }
-
-  /**
-   *
-   * @param {HTMLElement} element
-   */
-  function reactToCurrentFormStateBasedOnConditionalLogic(element) {
-    /** @type {TRuleset[][]} */
-    const ruleGroups = JSON.parse(element.getAttribute("conditional-logic"));
-
-    const result = ruleGroups.some((ruleGroup) =>
-      ruleGroup.every((rule) => resolveConditionalLogicRuleset(rule))
-    );
-
-    toggleDisplay(element, result);
-  }
-
-  /**
-   * @typedef {object} TRuleset
-   *
-   * @property {string} inputName
-   * @property {"HAS_ANY_VALUE" | "HAS_NO_VALUE" | "IS_EQUAL" | "NOT_EQUAL" | "CONTAINS" | "IS_GREATER_THAN" | "IS_LESS_THAN"} compareLogic
-   * @property {string} compareValue
-   */
-
-  /**
-   *
-   * @param {TRuleset} ruleset
-   * @returns {boolean}
-   */
-  function resolveConditionalLogicRuleset(ruleset) {
-    const { inputName, compareLogic, compareValue } = ruleset;
-    const inputValue = FORM_STATE[inputName] || "";
-
-    switch (compareLogic) {
-      case "HAS_ANY_VALUE":
-        return inputValue.length > 0;
-      case "HAS_NO_VALUE":
-        return inputValue.length === 0;
-      case "CONTAINS":
-        return inputValue.toLowerCase().includes(compareValue.toLowerCase());
-      case "IS_EQUAL":
-        return inputValue == compareValue;
-      case "NOT_EQUAL":
-        return inputValue != compareValue;
-      case "IS_GREATER_THAN":
-        return inputValue > compareValue;
-      case "IS_LESS_THAN":
-        return inputValue < compareValue;
-      default:
-        return false;
-    }
-  }
-  /**
-   * ----
-   * CONDITIONAL LOGIC - END
-   * ----
-   */
-
-  async function initializeFormFieldsPro() {
-    const siteId = document.querySelector("html").getAttribute("data-wf-site");
-    const url = window.location.href;
-    if (isUsingWebflowDomain(url) || (await hasValidLicenseKey(siteId))) {
-      makeTheFormInteractive();
-    }
-  }
-
-  function isUsingWebflowDomain(url) {
-    return /.*\.webflow\..*/gim.test(url);
-  }
-
-  async function hasValidLicenseKey(siteId) {
-    const res = await fetch(
-      `https://cache-service-staging.up.railway.app/api/license?siteId=${siteId}&appName=form-fields-pro`
-    );
-    if (res.ok) {
-      data = await res.json();
-
-      return data.active;
-    }
+  if (!pattern.test(value) && value.length > 0) {
+    validationMessageNode.innerHTML = errorMessage;
     return false;
   }
 
-  async function makeTheFormInteractive() {
-    formFieldsDateInput();
-    formFieldsUserIp();
-    formFieldsNumberSlider();
-    formFieldsSelect();
-    formFieldsPhoneNumberInput();
-    formFieldsColorPickerInput();
-    formFieldsFileUploadInput();
-    formFieldsNetPromoterScoreInput();
-    formFieldsLikertScaleInput();
+  validationMessageNode.innerHTML = "";
+  return true;
+}
 
-    preventWebflowDefaultFormSubmission();
-    addCustomFormSubmissionLogic();
-    initializeConditionalLogic();
+// URL validation
+
+const urlFields = document.querySelectorAll(
+  '.form-fields-wrapper input[type="url"]'
+);
+urlFields.forEach((field) => {
+  field.addEventListener("input", (e) => {
+    validateFieldData(
+      field,
+      e.target.value,
+      URL_PATTERN_REGEX,
+      "Enter a valid URL"
+    );
+  });
+});
+
+// Email validation
+const emailFields = document.querySelectorAll(
+  '.form-fields-wrapper input[type="email"]'
+);
+emailFields.forEach((field) => {
+  const message = field ? field.getAttribute("data-invalid-error-msg") : "";
+  field.addEventListener("input", (e) => {
+    validateFieldData(field, e.target.value, EMAIL_PATTERN_REGEX, message);
+  });
+});
+
+function validateAllFields() {
+  const urlFields = document.querySelectorAll(
+    '.form-fields-wrapper input[type="url"]'
+  );
+  const emailFields = document.querySelectorAll(
+    '.form-fields-wrapper input[type="email"]'
+  );
+  const phoneNumberFields = document.querySelectorAll(
+    '.form-fields-wrapper input[type="number"]'
+  );
+
+  for (let f of urlFields) {
+    const valid = validateFieldData(
+      f,
+      f.value,
+      URL_PATTERN_REGEX,
+      "Please enter a valid url"
+    );
+    if (!valid) return false;
   }
 
-  initializeFormFieldsPro();
+  for (let f of emailFields) {
+    const message =
+      f.getAttribute("data-invalid-error-msg") || "Please enter a valid email";
+    const valid = validateFieldData(f, f.value, EMAIL_PATTERN_REGEX, message);
+    if (!valid) return false;
+  }
+
+  for (let f of phoneNumberFields) {
+    if (f.required && f.value.length < 6) {
+      const formFieldsWrapper = getParentFormFieldsWrapperDiv(f);
+      const validationMessageNode = formFieldsWrapper?.querySelector(
+        ".form-fields-data-validation-message"
+      );
+      validationMessageNode.innerText = "Invalid phone number";
+      return false;
+    }
+  }
+
+  return true;
 }
+
+/**
+ * ----
+ * CONDITIONAL LOGIC - START
+ * ----
+ */
+
+/** */
+const FORM_STATE = {};
+const conditionalLogicFields = document.querySelectorAll("[conditional-logic]");
+
+function initializeConditionalLogic() {
+  conditionalLogicFields.forEach((field) => toggleDisplay(field));
+
+  observeInputChangesAndFireConditionalLogic();
+}
+
+/**
+ *
+ * @param {HTMLElement} element
+ * @param {boolean} show
+ */
+function toggleDisplay(element, show = false) {
+  if (show) element.style.display = "initial";
+  else element.style.display = "none";
+}
+
+async function observeInputChangesAndFireConditionalLogic() {
+  syncFormState();
+
+  conditionalLogicFields.forEach((field) =>
+    reactToCurrentFormStateBasedOnConditionalLogic(field)
+  );
+
+  await sleep(450);
+  return observeInputChangesAndFireConditionalLogic();
+}
+
+function syncFormState() {
+  const allInputFields = [
+    ...document.querySelectorAll(`input.w-input`),
+    ...document.querySelectorAll("[form-fields-data-input]"),
+  ];
+
+  allInputFields.forEach((input) => {
+    const name = input.getAttribute("name");
+    const value = input.value;
+
+    FORM_STATE[name] = value;
+  });
+}
+
+/**
+ *
+ * @param {HTMLElement} element
+ */
+function reactToCurrentFormStateBasedOnConditionalLogic(element) {
+  /** @type {TRuleset[][]} */
+  const ruleGroups = JSON.parse(element.getAttribute("conditional-logic"));
+
+  const result = ruleGroups.some((ruleGroup) =>
+    ruleGroup.every((rule) => resolveConditionalLogicRuleset(rule))
+  );
+
+  toggleDisplay(element, result);
+}
+
+/**
+ * @typedef {object} TRuleset
+ *
+ * @property {string} inputName
+ * @property {"HAS_ANY_VALUE" | "HAS_NO_VALUE" | "IS_EQUAL" | "NOT_EQUAL" | "CONTAINS" | "IS_GREATER_THAN" | "IS_LESS_THAN"} compareLogic
+ * @property {string} compareValue
+ */
+
+/**
+ *
+ * @param {TRuleset} ruleset
+ * @returns {boolean}
+ */
+function resolveConditionalLogicRuleset(ruleset) {
+  const { inputName, compareLogic, compareValue } = ruleset;
+  const inputValue = FORM_STATE[inputName] || "";
+
+  switch (compareLogic) {
+    case "HAS_ANY_VALUE":
+      return inputValue.length > 0;
+    case "HAS_NO_VALUE":
+      return inputValue.length === 0;
+    case "CONTAINS":
+      return inputValue.toLowerCase().includes(compareValue.toLowerCase());
+    case "IS_EQUAL":
+      return inputValue == compareValue;
+    case "NOT_EQUAL":
+      return inputValue != compareValue;
+    case "IS_GREATER_THAN":
+      return inputValue > compareValue;
+    case "IS_LESS_THAN":
+      return inputValue < compareValue;
+    default:
+      return false;
+  }
+}
+/**
+ * ----
+ * CONDITIONAL LOGIC - END
+ * ----
+ */
+
+async function initializeFormFieldsPro() {
+  const siteId = document.querySelector("html").getAttribute("data-wf-site");
+  const url = window.location.href;
+  if (isUsingWebflowDomain(url) || (await hasValidLicenseKey(siteId))) {
+    makeTheFormInteractive();
+  }
+}
+
+function isUsingWebflowDomain(url) {
+  return /.*\.webflow\..*/gim.test(url);
+}
+
+async function hasValidLicenseKey(siteId) {
+  const res = await fetch(
+    `https://cache-service-staging.up.railway.app/api/license?siteId=${siteId}&appName=form-fields-pro`
+  );
+  if (res.ok) {
+    data = await res.json();
+
+    return data.active;
+  }
+  return false;
+}
+
+async function makeTheFormInteractive() {
+  formFieldsDateInput();
+  formFieldsUserIp();
+  formFieldsNumberSlider();
+  formFieldsSelect();
+  formFieldsPhoneNumberInput();
+  formFieldsColorPickerInput();
+  formFieldsFileUploadInput();
+  formFieldsNetPromoterScoreInput();
+  formFieldsLikertScaleInput();
+
+  preventWebflowDefaultFormSubmission();
+  addCustomFormSubmissionLogic();
+  initializeConditionalLogic();
+}
+
+initializeFormFieldsPro();
